@@ -7,6 +7,7 @@
 #include <forward_list>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 
 namespace lru_cache {
@@ -37,13 +38,22 @@ public:
   };
 
   template <typename... Args> void emplace(const Key &key, Args &&... args) {
-    map.emplace(key, std::make_shared<Value>(std::forward<Args>(args)...));
+    {
+      std::scoped_lock lock{map_mutex};
+      map.emplace(key, std::make_shared<Value>(std::forward<Args>(args)...));
+    }
     unuse(key);
   }
 
-  Handle at(const Key &key) { return Handle{*this, key, map.at(key)}; }
+  Handle at(const Key &key) {
+    std::shared_lock lock{map_mutex};
+    return Handle{*this, key, map.at(key)};
+  }
 
-  bool contains(const Key &key) const { return map.count(key); }
+  bool contains(const Key &key) const {
+    std::shared_lock lock{map_mutex};
+    return map.count(key);
+  }
 
 private:
   friend Handle;
@@ -84,10 +94,12 @@ private:
     log << "Erasing " << key << ". " << unused_size - 1
         << " unused elements.\n";
     unused_size--;
+    std::scoped_lock lock{map_mutex};
     map.erase(key);
   }
 
   std::unordered_map<Key, HandleBase> map;
+  mutable std::shared_mutex map_mutex;
   std::forward_list<Key> unused;
   typename std::forward_list<Key>::const_iterator unused_back =
       unused.before_begin();
