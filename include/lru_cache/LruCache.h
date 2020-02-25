@@ -1,13 +1,13 @@
 #ifndef LRU_CACHE_LRUCACHE_H
 #define LRU_CACHE_LRUCACHE_H
 
+#include "Log.h"
+
 #include <atomic>
 #include <forward_list>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
-
-#include <iostream>
 
 template <typename Key, typename Value> class LruCache {
   using HandleBase = std::shared_ptr<Value>;
@@ -58,8 +58,7 @@ private:
         }
     }
     unused_size--;
-    std::cout << "Using " << key << ". " << unused_size
-              << " unused elements.\n";
+    log << "Using " << key << ". " << unused_size << " unused elements.\n";
   }
 
   void unuse(const Key &key) {
@@ -67,8 +66,8 @@ private:
       std::scoped_lock lock{list_mutex};
       unused_back = unused.insert_after(unused_back, key);
     }
-    std::cout << "Unusing " << key << ". " << unused_size + 1
-              << " unused elements.\n";
+    log << "Unusing " << key << ". " << unused_size + 1
+        << " unused elements.\n";
     if (++unused_size > max_unused)
       cleanup();
   }
@@ -80,8 +79,8 @@ private:
       unused.pop_front();
       return lru;
     }();
-    std::cout << "Erasing " << key << ". " << unused_size - 1
-              << " unused elements.\n";
+    log << "Erasing " << key << ". " << unused_size - 1
+        << " unused elements.\n";
     unused_size--;
     map.erase(key);
   }
