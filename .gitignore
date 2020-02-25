@@ -1,3 +1,9 @@
+# Generic build directory
+build/
+
+# CLion build directories
+cmake-build-*/
+
 # Prerequisites
 *.d
 
