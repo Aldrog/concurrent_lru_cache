@@ -9,6 +9,8 @@
 #include <mutex>
 #include <unordered_map>
 
+namespace lru_cache {
+
 template <typename Key, typename Value> class LruCache {
   using HandleBase = std::shared_ptr<Value>;
 
@@ -93,5 +95,7 @@ private:
   std::mutex list_mutex;
   const size_t max_unused = 10;
 };
+
+} // namespace lru_cache
 
 #endif // LRU_CACHE_LRUCACHE_H

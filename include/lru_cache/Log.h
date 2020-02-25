@@ -5,18 +5,26 @@
 
 #include <iostream>
 
+namespace lru_cache {
 static auto &log = std::cerr;
+}
 
 #else // LRU_CACHE_DEBUG
 
+namespace lru_cache {
+
+namespace detail {
 struct DiscardStream {};
 
 template <typename T>
 constexpr DiscardStream &operator<<(DiscardStream &str, const T &) {
   return str;
 }
+} // namespace detail
 
-static DiscardStream log;
+static detail::DiscardStream log;
+
+} // namespace lru_cache
 
 #endif // LRU_CACHE_DEBUG
 
