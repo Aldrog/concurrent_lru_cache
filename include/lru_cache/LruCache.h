@@ -12,11 +12,29 @@
 
 namespace lru_cache {
 
-template <typename Key, typename Value> class LruCache {
+namespace detail {
+
+template <typename Key, typename Value> struct Defaults {
+  static constexpr auto initialize = [](const Key &) { return Value{}; };
+};
+
+} // namespace detail
+
+template <typename Key, typename Value,
+          typename InitFunctor =
+              decltype(detail::Defaults<Key, Value>::initialize)>
+class LruCache {
   using HandleBase = std::shared_ptr<Value>;
 
 public:
-  explicit LruCache(size_t max_unused = 10) : max_unused{max_unused} {}
+  explicit LruCache(size_t max_unused,
+                    const InitFunctor &init_function =
+                        detail::Defaults<Key, Value>::initialize)
+      : max_unused{max_unused}, init_function{init_function} {}
+
+  LruCache(size_t max_unused, InitFunctor &&init_function)
+      : max_unused{max_unused}, init_function{
+                                    std::forward<InitFunctor>(init_function)} {}
 
   class Handle : public HandleBase {
   public:
@@ -26,23 +44,30 @@ public:
     }
 
   private:
-    friend LruCache<Key, Value>;
+    friend LruCache;
     Handle(LruCache &parent, const Key &key, const HandleBase &value)
         : std::shared_ptr<Value>(value), parent{parent}, key{key} {
       if (this->use_count() == 2) // Current handle and cached value
         parent.use(key);
     }
 
-    LruCache<Key, Value> &parent;
+    LruCache &parent;
     Key key;
   };
 
-  template <typename... Args> void emplace(const Key &key, Args &&... args) {
+  template <typename... Args>
+  std::pair<Handle, bool> emplace(const Key &key, Args &&... args) {
+    HandleBase result;
+    bool inserted;
     {
       std::scoped_lock lock{map_mutex};
-      map.emplace(key, std::make_shared<Value>(std::forward<Args>(args)...));
+      auto [it, ins] = map.emplace(
+          key, std::make_shared<Value>(std::forward<Args>(args)...));
+      result = it->second;
+      inserted = ins;
     }
-    unuse(key);
+    // No need to explicitly unuse key as it's implicitly used by result
+    return {Handle{*this, key, result}, inserted};
   }
 
   Handle at(const Key &key) {
@@ -55,19 +80,36 @@ public:
     return map.count(key);
   }
 
+  Handle operator[](const Key &key) {
+    HandleBase result;
+    {
+      std::scoped_lock lock{map_mutex};
+      if (!map.count(key)) {
+        result = std::make_shared<Value>(init_function(key));
+        map.emplace(key, result);
+      }
+    }
+    if (result) {
+      return Handle{*this, key, result};
+    }
+    std::shared_lock lock{map_mutex};
+    return Handle{*this, key, map.at(key)};
+  }
+
 private:
   friend Handle;
   void use(const Key &key) {
     {
       std::scoped_lock lock{list_mutex};
       for (auto it = unused.begin(), prev = unused.before_begin();
-           it != unused.end(); ++it, ++prev)
+           it != unused.end(); ++it, ++prev) {
         if (*it == key) {
           if (++it == unused.end())
             unused_back = prev;
           unused.erase_after(prev);
           break;
         }
+      }
     }
     unused_size--;
     log << "Using " << key << ". " << unused_size << " unused elements.\n";
@@ -106,6 +148,8 @@ private:
   std::atomic<size_t> unused_size{0};
   std::mutex list_mutex;
   const size_t max_unused = 10;
+
+  InitFunctor init_function;
 };
 
 } // namespace lru_cache
