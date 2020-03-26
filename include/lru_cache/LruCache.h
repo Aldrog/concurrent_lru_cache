@@ -113,8 +113,35 @@ public:
     return Handle{*this, key, map.at(key)};
   }
 
+  void erase(const Key &key) {
+    std::scoped_lock lock{map_mutex};
+    // Allowing to erase used elements may lead to hard-to-handle situations
+    // e.g. element erased -> new element created with the same key
+    // -> old handle destructed and tries to mark it's key as unused
+    if (map.at(key).use_count() > 1)
+      throw std::logic_error{"Erasing used elements is not supported"};
+    log << "Erasing " << key << ".\n";
+    use(key);
+    map.erase(key);
+  }
+
+  // Erases all unused elements
+  void clear() {
+    std::scoped_lock lock{list_mutex, map_mutex};
+    while (!unused.empty()) {
+      const Key &key = unused.front();
+      log << "Erasing " << key << ".\n";
+      map.erase(key);
+      unused.erase_after(unused.before_begin());
+    }
+    unused_size = 0;
+    unused_back = unused.before_begin();
+    log << unused_size << " unused elements.\n";
+  }
+
 private:
   friend Handle;
+
   void use(const Key &key) {
     {
       std::scoped_lock lock{list_mutex};

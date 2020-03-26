@@ -56,6 +56,41 @@ TEST_F(LruCacheDefaultTest, brackets) {
   ASSERT_NE(*cache[-1], "hello");
 }
 
+TEST_F(LruCacheDefaultTest, erase) {
+  fill(0);
+  ASSERT_TRUE(cache.contains(0));
+  cache.erase(0);
+  ASSERT_FALSE(cache.contains(0));
+}
+
+TEST_F(LruCacheDefaultTest, eraseWithHandle) {
+  auto test = cache[-1];
+  fill(0);
+  ASSERT_TRUE(cache.contains(-1));
+  ASSERT_THROW(cache.erase(-1), std::logic_error);
+}
+
+TEST_F(LruCacheDefaultTest, clear) {
+  fill(0);
+  for (int i = 0; i < cache_size; ++i)
+    ASSERT_TRUE(cache.contains(i));
+  cache.clear();
+  for (int i = 0; i < cache_size; ++i)
+    ASSERT_FALSE(cache.contains(i));
+}
+
+TEST_F(LruCacheDefaultTest, clearWithHandle) {
+  auto test = cache[-1];
+  fill(0);
+  ASSERT_TRUE(cache.contains(-1));
+  for (int i = 0; i < cache_size; ++i)
+    ASSERT_TRUE(cache.contains(i));
+  cache.clear();
+  ASSERT_TRUE(cache.contains(-1));
+  for (int i = 0; i < cache_size; ++i)
+    ASSERT_FALSE(cache.contains(i));
+}
+
 class LruCacheCustomInitTest : public testing::Test {
 public:
   LruCacheCustomInitTest() = default;
